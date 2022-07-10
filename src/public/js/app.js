@@ -1,46 +1,96 @@
-const messageList = document.querySelector("ul");
-const messageForm = document.querySelector("#message");
-const nickForm = document.querySelector("#nickname");
-const socket = new WebSocket(`ws://${window.location.host}`)
+const socket = io();
 
-function makeMessage(type, payload) {
-    const msg = {nickname, type, payload};
-    return JSON.stringify(msg);
+const welcome = document.getElementById("welcome");
+const form = welcome.querySelector("form");
+const room = document.getElementById("room");
+const nameform = welcome.querySelector("#name");
+const roomNameInfo = welcome.querySelector("#roomname");
+// 연결이 끊기면 계속해서 재시도 하는 모습을 볼 수 있음 (프론트 콘솔)
+// handle Room Submit
+
+room.hidden = true;
+
+let roomName;
+
+nameform.addEventListener("submit", handleNicknameSubmit);
+roomNameInfo.addEventListener("submit", handleRoomName);
+
+
+function addMessage(message) {
+    const ul = room.querySelector("ul");
+    const li = document.createElement("li");
+    li.innerText = message;
+    ul.appendChild(li);
 }
 
-socket.addEventListener("open", () => {
-    console.log("Connected to Sever 😁")
+
+function handleRoomName(event) {
+    event.preventDefault();
+    // js object를 보낼 수 있음 (msg 아님!), emit의 마지막 argument가 function일때 : back button어쩌구
+    const input = welcome.querySelector("#roomname input");
+    socket.emit("enter_room", input.value, showRoom); 
+    roomName = input.value;
+    input.value = "";
+}
+
+
+function handleMessageSubmit(event) {
+    event.preventDefault();
+    const input = room.querySelector("#msg input");
+    const value = input.value;
+    socket.emit("new_message", value, roomName, () => {
+        addMessage(`You : ${value}`);
+    });
+    input.value = ""; // aSync
+}
+
+function handleNicknameSubmit(event) {
+    event.preventDefault();
+    const input = welcome.querySelector("#name input");
+    const value = input.value;
+    socket.emit("nickname", value);
+    input.value = ""; // aSync
+}
+
+function showRoom() {
+    welcome.hidden = true;
+    room.hidden = false;
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName}`;
+    
+    const msgform = room.querySelector("#msg");
+    msgform.addEventListener("submit", handleMessageSubmit);
+}
+
+
+room.addEventListener("submit", (event) => {
+    event.preventDefault();
+})
+
+socket.on("welcome", (user, newCount) => {
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName} (${newCount})`;
+    addMessage(`${user} arrived!`);
 });
 
-socket.addEventListener("message", (msg) => {
-    const message = JSON.parse(msg.data);
-    switch (message.type) {
-        case "new_message" :
-            const li = document.createElement("li");
-            li.innerText = `${message.nickname} : ${message.payload}`
-            messageList.append(li);
-            break;
+socket.on("bye", (left, newCount) => {
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName} (${newCount})`;
+    addMessage(`${left} just left T.T`);
+});
+
+socket.on("new_message", addMessage);
+
+socket.on("room_change", (rooms) => {
+    const roomList = welcome.querySelector("ul");
+    roomList.innerHTML = "";
+    if (rooms.length === 0) {
+        return;
     }
+    rooms.forEach((room) => {
+        const li = document.createElement("li");
+        li.innerText = room;
+        roomList.append(li);
+    });
 });
-
-// 서버 죽었을 때
-socket.addEventListener("close", () => {
-    console.log("Connected from Server X");
-});
-
-messageForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const input = messageForm.querySelector("input");
-    socket.send(makeMessage("new_message", input.value));
-    // const li = document.createElement("li");
-    // li.innerText = `You : ${input.value}`; // 내가 쓴 메시지는 서버에서 오는게 아니라 내 프론트에서 그림
-    // messageList.append(li);
-    input.value = "";
-});
-
-nickForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const input = nickForm.querySelector("input");
-    socket.send(makeMessage("nickname", input.value));
-    input.value = "";
-});
+// socket.on("roon_change", (msg) => console.log(msg))와 같음
